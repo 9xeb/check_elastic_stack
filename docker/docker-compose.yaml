@@ -1,0 +1,126 @@
+version: '3.9'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    # <<: *elasticsearch-common
+    hostname: es{{.Task.Slot}}
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata:/usr/share/elasticsearch/data
+    environment:
+      - node.name=es{{.Task.Slot}}
+      - cluster.name=docker-cluster
+      - cluster.initial_master_nodes=es1,es2,es3
+      - discovery.seed_hosts=es1,es2
+      - ELASTIC_PASSWORD=changeme
+      # - ES_JAVA_OPTS="-Xms2g -Xmx2g"
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.key
+      - xpack.security.http.ssl.certificate=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.key
+      - xpack.security.transport.ssl.certificate=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=basic
+      - xpack.ml.use_auto_machine_memory_percent=true
+    # mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+      replicas: 3
+
+  setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    user: "0"
+    command: bash /setup.sh
+    environment:
+      - ELASTIC_PASSWORD=changeme
+      - KIBANA_PASSWORD=changeme
+    configs:
+      - source: setup-script
+        target: /setup.sh
+      - source: es-instances
+        target: /instances.yml
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f config/certs/es1/es1.crt ]"]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+    deploy:
+      replicas: 1
+
+  kibana:
+    # depends_on:
+    #   - elasticsearch
+    image: docker.elastic.co/kibana/kibana:8.17.3
+    volumes:
+      - certs:/usr/share/kibana/config/certs
+      - kibanadata:/usr/share/kibana/data
+    # ports:
+    #   - 5601:5601
+    # environment:
+    #   - server.name=kibana{{.Task.Slot}}
+    #   - elasticsearch.hosts=https://es1:9200
+    #   - elasticsearch.username=kibana_system
+    #   - elasticsearch.password=changeme
+      # - elasticsearch.ssl.certificateAuthorities=config/certs/ca/ca.crt
+    environment:
+      SERVER_NAME: kibana{{.Task.Slot}}
+      # SERVER_NAME: kibana
+      ELASTICSEARCH_HOSTS: '["https://es1:9200"]'
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: changeme
+      ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES: config/certs/ca/ca.crt
+      # - ELASTICSEARCH_HOSTS=https://es1:9200
+      # - ELASTICSEARCH_USERNAME=kibana_system
+      # - ELASTICSEARCH_PASSWORD=changeme
+      # - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
+    # mem_limit: ${MEM_LIMIT}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+      replicas: 1
+      # replicas: 3
+
+configs:
+  setup-script:
+    file: ./setup.sh
+  es-instances:
+    file: ./instances.yml
+
+volumes:
+  certs:
+  esdata:
+    name: 'esdata{{.Task.Slot}}'
+  kibanadata:
+    name: 'kibanadata{{.Task.Slot}}'
+#   esdata01:
+#     driver: local
+#   esdata02:
+#     driver: local
+#   esdata03:
+#     driver: local
+#   kibanadata:
+#     driver: local
