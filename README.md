@@ -6,6 +6,8 @@ https://github.com/elastic/elasticsearch/blob/8.17/docs/reference/setup/install/
 
 ### Kibana HA
 https://www.elastic.co/guide/en/kibana/current/production.html#high-availability
+https://www.elastic.co/guide/en/kibana/current/docker.html#configuring-kibana-docker
+https://www.elastic.co/guide/en/kibana/8.17/settings.html
 
 ### Cluster Health API
 https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html
