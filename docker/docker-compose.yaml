@@ -1,6 +1,15 @@
 version: '3.9'
 
 services:
+  # healthcheck:
+  #   # run healthcheck script periodically as healthcheck for testing
+  # #   command: sleep inf
+  #     healthcheck:
+  #     test: ["CMD-SHELL", "./check_elastic_stack"]
+  #     interval: 1s
+  #     timeout: 5s
+  #     retries: 120
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
     # <<: *elasticsearch-common
@@ -11,10 +20,9 @@ services:
     environment:
       - node.name=es{{.Task.Slot}}
       - cluster.name=docker-cluster
-      - cluster.initial_master_nodes=es1,es2,es3
+      - cluster.initial_master_nodes=es1,es2,es3,es4,es5
       - discovery.seed_hosts=es1,es2
       - ELASTIC_PASSWORD=changeme
-      # - ES_JAVA_OPTS="-Xms2g -Xmx2g"
       - bootstrap.memory_lock=true
       - xpack.security.enabled=true
       - xpack.security.http.ssl.enabled=true
@@ -37,7 +45,47 @@ services:
       resources:
         limits:
           memory: 1G
-      replicas: 3
+      replicas: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.17.3
+    volumes:
+      - certs:/usr/share/kibana/config/certs
+      - kibanadata:/usr/share/kibana/data
+    ports:
+      - 5601:5601
+    # see https://www.elastic.co/guide/en/kibana/current/docker.html#configuring-kibana-docker for kibana env vars format (different from elasticsearch!)
+    # looks like kibana is just a frontend of elasticsearch
+    # data consistency is guaranteed by elasticsearch cluster
+    # the only thing to keep in mind with multi-node kibana is to preserve user session if a replica crashes. 
+    # User session is preserved across replicas if they all share:
+    # - 'xpack.security.cookieName' so a different replica can pick up the same cookie;
+    # - 'xpack.security_encryptionkey' to encrypt cookie with the same key;
+    # - 'xpack.reporting.encryptionkey'
+    environment:
+      SERVER_NAME: kibana{{.Task.Slot}}
+      ELASTICSEARCH_HOSTS: '["https://es1:9200","https://es2:9200","https://es3:9200","https://es4:9200","https://es5:9200"]'
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: changeme
+      ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES: config/certs/ca/ca.crt
+      XPACK_SECURITY_COOKIENAME: docker-cluster
+      XPACK_SECURITY_ENCRYPTIONKEY: c6i544R629Ekw4yosku2WMXdLD2qU9PT
+      XPACK_REPORTING_ENCRYPTIONKEY: FacVbhg6SH7xFvxfMtYS6gr64GGDT65f
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+      replicas: 2
+      # replicas: 3
 
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
@@ -61,49 +109,6 @@ services:
     deploy:
       replicas: 1
 
-  kibana:
-    # depends_on:
-    #   - elasticsearch
-    image: docker.elastic.co/kibana/kibana:8.17.3
-    volumes:
-      - certs:/usr/share/kibana/config/certs
-      - kibanadata:/usr/share/kibana/data
-    # ports:
-    #   - 5601:5601
-    # environment:
-    #   - server.name=kibana{{.Task.Slot}}
-    #   - elasticsearch.hosts=https://es1:9200
-    #   - elasticsearch.username=kibana_system
-    #   - elasticsearch.password=changeme
-      # - elasticsearch.ssl.certificateAuthorities=config/certs/ca/ca.crt
-    environment:
-      SERVER_NAME: kibana{{.Task.Slot}}
-      # SERVER_NAME: kibana
-      ELASTICSEARCH_HOSTS: '["https://es1:9200"]'
-      ELASTICSEARCH_USERNAME: kibana_system
-      ELASTICSEARCH_PASSWORD: changeme
-      ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES: config/certs/ca/ca.crt
-      # - ELASTICSEARCH_HOSTS=https://es1:9200
-      # - ELASTICSEARCH_USERNAME=kibana_system
-      # - ELASTICSEARCH_PASSWORD=changeme
-      # - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
-    # mem_limit: ${MEM_LIMIT}
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
-        ]
-      interval: 10s
-      timeout: 10s
-      retries: 120
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-      replicas: 1
-      # replicas: 3
-
 configs:
   setup-script:
     file: ./setup.sh
@@ -113,9 +118,9 @@ configs:
 volumes:
   certs:
   esdata:
-    name: 'esdata{{.Task.Slot}}'
+    name: 'elk_esdata{{.Task.Slot}}'
   kibanadata:
-    name: 'kibanadata{{.Task.Slot}}'
+    name: 'elk_kibanadata{{.Task.Slot}}'
 #   esdata01:
 #     driver: local
 #   esdata02:

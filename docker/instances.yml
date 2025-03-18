@@ -2,18 +2,48 @@ instances:
    - name: es1
      dns:
        - es1
-       - localhost
-     ip:
-       - 127.0.0.1
    - name: es2
      dns:
        - es2
-       - localhost
-     ip:
-       - 127.0.0.1
    - name: es3
      dns:
        - es3
-       - localhost
-     ip:
-       - 127.0.0.1
+   - name: es4
+     dns:
+       - es4
+   - name: es5
+     dns:
+       - es5
+
+# instances:
+#    - name: es1
+#      dns:
+#        - es1
+#        - localhost
+#      ip:
+#        - 127.0.0.1
+#    - name: es2
+#      dns:
+#        - es2
+#        - localhost
+#      ip:
+#        - 127.0.0.1
+#    - name: es3
+#      dns:
+#        - es3
+#        - localhost
+#      ip:
+#        - 127.0.0.1
+#    - name: es4
+#      dns:
+#        - es3
+#        - localhost
+#      ip:
+#        - 127.0.0.1
+#    - name: es5
+#      dns:
+#        - es3
+#        - localhost
+#      ip:
+#        - 127.0.0.1
+
