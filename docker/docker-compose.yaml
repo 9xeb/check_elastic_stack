@@ -19,8 +19,10 @@ services:
       - esdata:/usr/share/elasticsearch/data
     environment:
       - node.name=es{{.Task.Slot}}
+      # explicit host publishing must be done to ensure elasticsearch does not advertise its 'ingress' NIC when using swarm's default loadbalancer
+      - network.publish_host=es{{.Task.Slot}}
       - cluster.name=docker-cluster
-      - cluster.initial_master_nodes=es1,es2,es3,es4,es5
+      - cluster.initial_master_nodes=es1,es2,es3
       - discovery.seed_hosts=es1,es2
       - ELASTIC_PASSWORD=changeme
       - bootstrap.memory_lock=true
@@ -46,9 +48,15 @@ services:
         limits:
           memory: 1G
       replicas: 5
+    # binding to port spawn a new virtual NIC in the container
+    ports:
+      - 9200:9200
+    networks:
+      - elasticsearch
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.17.3
+    hostname: kibana{{.Task.Slot}}
     volumes:
       - certs:/usr/share/kibana/config/certs
       - kibanadata:/usr/share/kibana/data
@@ -86,29 +94,41 @@ services:
       resources:
         limits:
           memory: 1G
-      replicas: 2
+      replicas: 0
       # replicas: 3
 
-  # logstash01:
-  #   depends_on:
-  #     es01:
-  #       condition: service_healthy
-  #     kibana:
-  #       condition: service_healthy
-  #   image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
-  #   labels:
-  #     co.elastic.logs/module: logstash
-  #   user: root
-  #   volumes:
-  #     - certs:/usr/share/logstash/certs
-  #     - logstashdata01:/usr/share/logstash/data
-  #     - "./logstash_ingest_data/:/usr/share/logstash/ingest_data/"
-  #     - "./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro"
-  #   environment:
-  #     - xpack.monitoring.enabled=false
-  #     - ELASTIC_USER=elastic
-  #     - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-  #     - ELASTIC_HOSTS=https://es01:9200
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.17.3
+    hostname: logstash{{.Task.Slot}}
+    # labels:
+    #   co.elastic.logs/module: logstash
+    user: root
+    volumes:
+      - certs:/usr/share/logstash/certs
+      - logstashdata:/usr/share/logstash/data
+      # - "./logstash_ingest_data/:/usr/share/logstash/ingest_data/"
+      # - "./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro"
+    environment:
+      node.name: logstash{{.Task.Slot}}
+      xpack.monitoring.enabled: 'false'
+      xpack.monitoring.elasticsearch.hosts: '["https://es1:9200","https://es2:9200","https://es3:9200","https://es4:9200","https://es5:9200"]'
+      ELASTIC_USER: elastic
+      ELASTIC_PASSWORD: changeme
+      # ELASTIC_HOSTS: '["https://es1:9200","https://es2:9200","https://es3:9200","https://es4:9200","https://es5:9200"]'
+      # ELASTIC_HOSTS: https://es1:9200
+    ports:
+      - 9600:9600
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:9600 | grep -q 'HTTP/1.1 200 OK'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+    deploy:
+      replicas: 0
 
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
@@ -144,11 +164,8 @@ volumes:
     name: 'elk_esdata{{.Task.Slot}}'
   kibanadata:
     name: 'elk_kibanadata{{.Task.Slot}}'
-#   esdata01:
-#     driver: local
-#   esdata02:
-#     driver: local
-#   esdata03:
-#     driver: local
-#   kibanadata:
-#     driver: local
+  logstashdata:
+    name: 'elk_logstashdata{{.Task.Slot}}'
+
+networks:
+  elasticsearch:

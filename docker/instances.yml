@@ -1,19 +1,9 @@
 instances:
    - name: es1
-     dns:
-       - es1
    - name: es2
-     dns:
-       - es2
    - name: es3
-     dns:
-       - es3
    - name: es4
-     dns:
-       - es4
    - name: es5
-     dns:
-       - es5
 
 # instances:
 #    - name: es1
