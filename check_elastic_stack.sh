@@ -26,7 +26,7 @@ usage()
                         [ -h | --host <host_or_endpoint> ]
                         [ -u | --user <user> ] 
                         [ -p | --password <password> ]"
-  exit 2
+  exit 3
 }
 
 # see https://www.shellscript.sh/examples/getopt/
@@ -79,19 +79,63 @@ do
   esac
 done
 
+# Ensure mandatory arguments were passed
+if ! [[ -v CHECK && -v HOST && -v USER && -v PASSWORD ]]; then
+    echo "Missing options."
+    usage
+fi
+
 # ENDPOINT is built here
 ENDPOINT=$HOST
+
 # First check if host does not have URL scheme and possibly prepend the default (https)
 [[ "$ENDPOINT" =~ ^(http|https):\/\/.* ]] || ENDPOINT=https://$ENDPOINT
+
 # Then check if host does not have explicit port and possibly append the default according to requested check
 [[ "$ENDPOINT" =~ :\d{1,5}$ ]] || ENDPOINT=$ENDPOINT:$PORT
+
 ENDPOINT=$ENDPOINT/$CHECK_PATH
 
-echo "Checking $CHECK on endpoint $ENDPOINT with creds $USER:$PASSWORD" 1>&2
+# echo "Checking $CHECK on endpoint $ENDPOINT with creds $USER:$PASSWORD" 1>&2
 
-# curl_response=$(curl --silent --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT")
+
+# see https://unix.stackexchange.com/questions/474177/how-to-redirect-stderr-in-a-variable-but-keep-stdout-in-the-console
+# The idea is to:
+# 1. create FD 3
+# 2. redirect stdout to 3
+# 3. redirect stderr to stdout
+# 4. save stdout to var
+# 5. pop out 3 to 1 to console
+# { 
+#     curl_stderr=$(curl --silent --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT" 2>&1 >&3 3>&-);
+#     curl_exit_code="$?"; 
+# } 3>&1
+
+# curl_stdout=$(curl --silent --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT") | curl_stderr=$(</dev/stdin)
 # curl_exit_code="$?"
-# case "$curl_exit_code" in
-#     0) echo "OK - $CHECK is green!"; exit 0 ;;
-#     *) echo "UNKNOWN - $curl_response"; exit $curl_exit_code ;;
-# esac
+
+curl_output=$(curl --silent --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT" 2>&1)
+curl_exit_code="$?"
+
+case "$curl_exit_code" in
+    0) 
+        case $CHECK in
+            elasticsearch)
+                # TODO: maybe include jq response in nagios output?
+                if echo "$curl_output" | jq -e '. | select(.status == "green")' >&2; then
+                    echo "OK - $CHECK cluster is green, all shards are active!"
+                    exit 0
+                elif echo "$curl_output" | jq -e '. | select(.status == "yellow")' >&2; then
+                    echo "WARNING - $CHECK cluster is yellow, some shards are inactive!"
+                    exit 1
+                elif echo "$curl_output" | jq -e '. | select(.status == "red")' >&2; then
+                    echo "WARNING - $CHECK cluster is red, shard is absent!"
+                    exit 2
+                fi
+                ;;
+            kibana);;
+            logstash);;
+        esac
+        ;;
+    *) echo "UNKNOWN - $curl_output"; exit 3 ;;
+esac
