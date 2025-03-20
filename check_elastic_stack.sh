@@ -1,36 +1,43 @@
 #!/bin/bash
 
-# EXAMPLE USAGE MESSAGE
-# Usage: curl [options...] <url>
-#  -d, --data <data>          HTTP POST data
-#  -f, --fail                 Fail silently (no output at all) on HTTP errors
-#  -h, --help <category>      Get help for commands
-#  -i, --include              Include protocol response headers in the output
-#  -o, --output <file>        Write to file instead of stdout
-#  -O, --remote-name          Write output to a file named as the remote file
-#  -s, --silent               Silent mode
-#  -T, --upload-file <file>   Transfer local FILE to destination
-#  -u, --user <user:password> Server user and password
-#  -A, --user-agent <name>    Send User-Agent <name> to server
-#  -v, --verbose              Make the operation more talkative
-#  -V, --version              Show version number and quit
-
-# This is not the full help, this menu is stripped into categories.
-# Use "--help category" to get an overview of all categories.
-# For all options use the manual or "--help all".
-
-
 usage()
 {
-  echo "Usage: check_elastic_stack [ -c | --check <elasticsearch|kibana|logstash> ]
-                        [ -h | --host <host_or_endpoint> ]
-                        [ -u | --user <user> ] 
-                        [ -p | --password <password> ]"
+  echo "Usage: check_elastic_stack [options...]
+  -c, --check <elasticsearch|kibana|logstash>
+  -h, --host <host_or_endpoint>
+  -u, --user <user>
+  -p, --password <password>
+  [-t, --timeout <seconds>]
+  
+Perform healthchecks on elasticsearch, kibana or logstash endpoints."
   exit 3
 }
 
+elasticsearch_checks() {
+    if echo "$curl_output" | jq -e '. | select(.status == "green")' >/dev/null; then
+        check_code=0
+        check_message="All shards are active!"
+    elif echo "$curl_output" | jq -e '. | select(.status == "yellow")' >/dev/null; then
+        check_code=1
+        check_message="Some shards are inactive!"
+    elif echo "$curl_output" | jq -e '. | select(.status == "red")' >/dev/null; then
+        check_code=2
+        check_message="Some shards are absent!"
+    fi
+}
+
+kibana_checks() {
+    check_code=0
+    check_message="[ ($check_path) All good in kibana ]"
+}
+
+logstash_checks() {
+    check_code=0
+    check_message="[ ($check_path) All good in kibana ]"
+}
+
 # see https://www.shellscript.sh/examples/getopt/
-PARSED_ARGUMENTS=$(getopt -n check_elastic_stack -o c:h:u:p: --long check:,host:,user:,password: -- "$@")
+PARSED_ARGUMENTS=$(getopt -n check_elastic_stack -o c:h:u:p:t: --long check:,host:,user:,password:,timeout: -- "$@")
 VALID_ARGUMENTS=$?
 if [ "$VALID_ARGUMENTS" != "0" ]; then
     usage
@@ -50,6 +57,8 @@ eval set -- "$PARSED_ARGUMENTS"
 #     shift
 # done
 
+# Default value for timeout seconds
+TIMEOUT_SECONDS=5
 
 # Translate 'getopt'-ed arguments into env vars to be used during actual check operations
 # Care is taken here to ensure sane defaults to fall back to are set for values like PORTs and URLs
@@ -59,17 +68,18 @@ do
     -c | --check)
         # first three cases determine the default PORT, then they all fallthrough to set the CHECK mode
         case "$2" in
-            elasticsearch) CHECK=elasticsearch; PORT=9200; CHECK_PATH="_cluster/health"; shift 2 ;;
-            kibana)        CHECK=kibana;        PORT=5601; CHECK_PATH="changeme";        shift 2 ;;
-            logstash)      CHECK=logstash;      PORT=9600; CHECK_PATH="changeme";        shift 2 ;;
+            elasticsearch) CHECK=elasticsearch; SCHEMA=https:// PORT=9200; CHECK_PATHS="_cluster/health?pretty";                       shift 2 ;;
+            kibana)        CHECK=kibana;        SCHEMA=http://  PORT=5601; CHECK_PATHS="status api/status api/task_manager/_health";   shift 2 ;;
+            logstash)      CHECK=logstash;      SCHEMA=http://  PORT=9600; CHECK_PATHS="changeme";                                     shift 2 ;;
             # elasticsearch|kibana|logstash) CHECK=$2; shift 2 ;; # CHECK mode is recalled later when performing check operations
             *) echo "Invalid check type: $2"
                usage ;;
         esac
         ;;
-    -h | --host)     HOST=$2     ; shift 2 ;;
-    -u | --user)     USER=$2     ; shift 2 ;;
-    -p | --password) PASSWORD=$2 ; shift 2 ;;
+    -h | --host)     HOST=$2            ; shift 2 ;;
+    -u | --user)     USER=$2            ; shift 2 ;;
+    -p | --password) PASSWORD=$2        ; shift 2 ;;
+    -t | --timeout)  TIMEOUT_SECONDS=$2 ; shift 2 ;;
     # -- means the end of the arguments; drop this, and break out of the while loop
     --) shift; break ;;
     # If invalid options were passed, then getopt should have reported an error,
@@ -87,55 +97,70 @@ fi
 
 # ENDPOINT is built here
 ENDPOINT=$HOST
-
 # First check if host does not have URL scheme and possibly prepend the default (https)
-[[ "$ENDPOINT" =~ ^(http|https):\/\/.* ]] || ENDPOINT=https://$ENDPOINT
-
-# Then check if host does not have explicit port and possibly append the default according to requested check
-[[ "$ENDPOINT" =~ :\d{1,5}$ ]] || ENDPOINT=$ENDPOINT:$PORT
-
-ENDPOINT=$ENDPOINT/$CHECK_PATH
+[[ "$ENDPOINT" =~ ^(http|https):\/\/.* ]] || ENDPOINT=$SCHEMA$ENDPOINT
+# Then check if host does not have explicit port and possibly append the default port (depends on check)
+# TODO: this is broken, fix it
+[[ "$ENDPOINT" =~ .*:\d{1,5}$ ]] || ENDPOINT=$ENDPOINT:$PORT
 
 # echo "Checking $CHECK on endpoint $ENDPOINT with creds $USER:$PASSWORD" 1>&2
 
+nagios_message=""
+nagios_exit_code=0
+for check_path in $CHECK_PATHS; do
 
-# see https://unix.stackexchange.com/questions/474177/how-to-redirect-stderr-in-a-variable-but-keep-stdout-in-the-console
-# The idea is to:
-# 1. create FD 3
-# 2. redirect stdout to 3
-# 3. redirect stderr to stdout
-# 4. save stdout to var
-# 5. pop out 3 to 1 to console
-# { 
-#     curl_stderr=$(curl --silent --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT" 2>&1 >&3 3>&-);
-#     curl_exit_code="$?"; 
-# } 3>&1
+    echo "Checking $CHECK on endpoint $ENDPOINT/$check_path with creds $USER:$PASSWORD" 1>&2
+    # Reach out to API as specified by user request
+    curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT"/"$check_path" 2>&1)
+    curl_exit_code="$?"
+    # TODO: curl timeout, skip TLS and other useful options
 
-# curl_stdout=$(curl --silent --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT") | curl_stderr=$(</dev/stdin)
-# curl_exit_code="$?"
 
-curl_output=$(curl --silent --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT" 2>&1)
-curl_exit_code="$?"
+    # Perform context-based checks on API response
+    case "$curl_exit_code" in
+        0) 
+            case $CHECK in
+                elasticsearch)
+                    # see https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html
 
-case "$curl_exit_code" in
-    0) 
-        case $CHECK in
-            elasticsearch)
-                # TODO: maybe include jq response in nagios output?
-                if echo "$curl_output" | jq -e '. | select(.status == "green")' >&2; then
-                    echo "OK - $CHECK cluster is green, all shards are active!"
-                    exit 0
-                elif echo "$curl_output" | jq -e '. | select(.status == "yellow")' >&2; then
-                    echo "WARNING - $CHECK cluster is yellow, some shards are inactive!"
-                    exit 1
-                elif echo "$curl_output" | jq -e '. | select(.status == "red")' >&2; then
-                    echo "WARNING - $CHECK cluster is red, shard is absent!"
-                    exit 2
-                fi
-                ;;
-            kibana);;
-            logstash);;
-        esac
-        ;;
-    *) echo "UNKNOWN - $curl_output"; exit 3 ;;
-esac
+                    # Perform arbitrary checks on API responses
+                    elasticsearch_checks
+                    ;;
+                kibana)
+                    # https://www.elastic.co/blog/troubleshooting-kibana-health
+                    # echo "$curl_output"
+                    kibana_checks
+                    ;;
+                logstash) 
+                    # echo "$curl_output"
+                    logstash_checks
+                    ;;
+            esac
+            ;;
+        22)
+            # as per https://everything.curl.dev/cmdline/exitcode.html, 22 is thrown when HTTP response is 400 or above
+            nagios_message=$(printf "(%s) %s" "$ENDPOINT"/"$check_path" "$curl_output";)
+            nagios_exit_code=2
+            ;;
+        *) 
+            # printf "%s UNKNOWN - (%s) %s" "$CHECK" "$ENDPOINT"/"$check_path" "$curl_output";
+            nagios_message=$(printf "(%s) %s" "$ENDPOINT"/"$check_path" "$curl_output";)
+            nagios_exit_code=3
+            ;;
+    esac
+
+    # Nagios output is updated according to the result of API checks above
+    if (( check_code >= nagios_exit_code )); then
+        # Get here if check escalated to a higher nagios exit code
+        nagios_exit_code=$check_code
+        printf -v nagios_message "%s %s" "$nagios_message" "$check_message"
+        # nagios_message=$(printf "%s%s\n" "$nagios_message" "$check_message")
+    fi
+
+done
+
+# Format output according to Nagios specifications
+NAGIOS_CODES=(OK WARNING CRITICAL UNKNOWN)
+service_name=$(echo "$CHECK" | tr '[:lower:]' '[:upper:]')
+printf "%s %s - %s\n" "$service_name" "${NAGIOS_CODES[$nagios_exit_code]}" "$nagios_message"
+exit "$nagios_exit_code"
