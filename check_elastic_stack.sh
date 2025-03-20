@@ -14,6 +14,7 @@ Perform healthchecks on elasticsearch, kibana or logstash endpoints."
 }
 
 elasticsearch_checks() {
+    # https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html
     if echo "$curl_output" | jq -e '. | select(.status == "green")' >/dev/null; then
         check_code=0
         check_message="All shards are active!"
@@ -27,11 +28,13 @@ elasticsearch_checks() {
 }
 
 kibana_checks() {
+    # https://www.elastic.co/blog/troubleshooting-kibana-health
     check_code=0
     check_message="[ ($check_path) All good in kibana ]"
 }
 
 logstash_checks() {
+    # https://www.elastic.co/guide/en/logstash/current/monitoring-logstash.html
     check_code=0
     check_message="[ ($check_path) All good in kibana ]"
 }
@@ -60,6 +63,8 @@ eval set -- "$PARSED_ARGUMENTS"
 # Default value for timeout seconds
 TIMEOUT_SECONDS=5
 
+
+# FIRST SECTION: parse user arguments
 # Translate 'getopt'-ed arguments into env vars to be used during actual check operations
 # Care is taken here to ensure sane defaults to fall back to are set for values like PORTs and URLs
 while :
@@ -68,10 +73,9 @@ do
     -c | --check)
         # first three cases determine the default PORT, then they all fallthrough to set the CHECK mode
         case "$2" in
-            elasticsearch) CHECK=elasticsearch; SCHEMA=https:// PORT=9200; CHECK_PATHS="_cluster/health?pretty";                       shift 2 ;;
-            kibana)        CHECK=kibana;        SCHEMA=http://  PORT=5601; CHECK_PATHS="status api/status api/task_manager/_health";   shift 2 ;;
-            logstash)      CHECK=logstash;      SCHEMA=http://  PORT=9600; CHECK_PATHS="changeme";                                     shift 2 ;;
-            # elasticsearch|kibana|logstash) CHECK=$2; shift 2 ;; # CHECK mode is recalled later when performing check operations
+            elasticsearch) CHECK=elasticsearch; SCHEMA=https:// PORT=9200; CHECK_PATHS="/_cluster/health?pretty";                         shift 2 ;;
+            kibana)        CHECK=kibana;        SCHEMA=http://  PORT=5601; CHECK_PATHS="/status /api/status /api/task_manager/_health";   shift 2 ;;
+            logstash)      CHECK=logstash;      SCHEMA=http://  PORT=9600; CHECK_PATHS="/?pretty";                                        shift 2 ;;
             *) echo "Invalid check type: $2"
                usage ;;
         esac
@@ -105,36 +109,25 @@ ENDPOINT=$HOST
 
 # echo "Checking $CHECK on endpoint $ENDPOINT with creds $USER:$PASSWORD" 1>&2
 
+
+# SECOND SECTION: perform context-based checks
 nagios_message=""
 nagios_exit_code=0
 for check_path in $CHECK_PATHS; do
 
-    echo "Checking $CHECK on endpoint $ENDPOINT/$check_path with creds $USER:$PASSWORD" 1>&2
+    echo "Checking $CHECK on endpoint $ENDPOINT$check_path with creds $USER:$PASSWORD" 1>&2
     # Reach out to API as specified by user request
-    curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT"/"$check_path" 2>&1)
+    curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT""$check_path" 2>&1)
     curl_exit_code="$?"
-    # TODO: curl timeout, skip TLS and other useful options
 
-
-    # Perform context-based checks on API response
+    # Case statement to look at cURL exit codes
     case "$curl_exit_code" in
         0) 
+            # Perform context-based checks on API response
             case $CHECK in
-                elasticsearch)
-                    # see https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html
-
-                    # Perform arbitrary checks on API responses
-                    elasticsearch_checks
-                    ;;
-                kibana)
-                    # https://www.elastic.co/blog/troubleshooting-kibana-health
-                    # echo "$curl_output"
-                    kibana_checks
-                    ;;
-                logstash) 
-                    # echo "$curl_output"
-                    logstash_checks
-                    ;;
+                elasticsearch)  elasticsearch_checks ;;
+                kibana)         kibana_checks        ;;
+                logstash)       logstash_checks      ;;
             esac
             ;;
         22)
@@ -159,7 +152,8 @@ for check_path in $CHECK_PATHS; do
 
 done
 
-# Format output according to Nagios specifications
+
+# THIRD SECTION: format output according to Nagios specifications
 NAGIOS_CODES=(OK WARNING CRITICAL UNKNOWN)
 service_name=$(echo "$CHECK" | tr '[:lower:]' '[:upper:]')
 printf "%s %s - %s\n" "$service_name" "${NAGIOS_CODES[$nagios_exit_code]}" "$nagios_message"
