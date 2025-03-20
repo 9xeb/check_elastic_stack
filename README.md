@@ -1,6 +1,7 @@
 # check_elastic_stack
 
 ## Dependencies
+- printf
 - getopt
 - curl
 - jq
@@ -16,6 +17,12 @@ Kibana ...
 
 ### Logstash
 Logstash ...
+
+## Design
+The script is divided into three major parts:
+ - Arguments parsing, where user arguments are mapped to named vars to be used later in the script;
+ - Checks loop, where all requested checks are performed and the Nagios output is dynamically and incrementally built;
+ - Nagios output and exit code.
 
 ## References
 ### Starting example in docker compose (to be adjusted for swarm mode)
