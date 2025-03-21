@@ -74,3 +74,10 @@ https://nagios-plugins.org/doc/guidelines.html#PLUGOUTPUT
 `curl -vk -u elastic:changeme https://es1:9200/_cat/health`
 
 `curl -vk -u elastic:changeme https://es1:9200/_cluster/health`
+
+
+### Icinga2
+#### Installation https://icinga.com/docs/icinga-2/latest/doc/02-installation/01-Debian/
+#### Macros https://icinga.com/docs/icinga-2/latest/doc/03-monitoring-basics/
+#### CheckCommand https://icinga.com/docs/icinga-2/latest/doc/09-object-types/
+#### Service https://icinga.com/docs/icinga-2/latest/doc/05-service-monitoring/
