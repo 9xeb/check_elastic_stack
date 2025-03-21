@@ -7,15 +7,15 @@
 - jq
 
 ## Plugin Design
-The script is divided into three major parts:
- - Arguments parsing, where user arguments are mapped to named vars to be used later in the script;
- - Checks loop, where all requested checks are performed and the Nagios output is dynamically and incrementally built;
- - Nagios output and exit code.
-### Checks Function
-This design is modular enough to be easily extended to other contexts. This is done in three steps:
- 1. define a new check case when parsing arguments, together with the corresponding list of API endpoints to check and other env vars you may require;
- 2. write a check function that must set the check_code and check_message variables. These variables will be ingested by the main script when building the final Nagios output.
- 3. call the function defined in (2.) during the "check loop" section of the script.
+The script is divided into three major sections:
+ 1. <a id="section_1"></a> Arguments parsing, where user arguments are mapped to named vars to be used later in the script;
+ 2. <a id="section_2"></a> Checks loop, where all requested checks are performed and the Nagios output is dynamically and incrementally built;
+ 3. <a id="section_3"></a> Nagios output and exit code.
+### Check Contexts
+Currently there are only three contexts available: elasticsearch, kibana and logstash. However, the script's design is modular enough that it can be easily extended with new contexts. This is done in three steps:
+ - define a new check case in section [section 1](#section_1), when parsing arguments, together with the corresponding list of API endpoints to check and other env vars you may require;
+ - write a check function that must set the check_code and check_message variables. These variables will be ingested by the main script when building the final Nagios output.
+ - call the function defined in section [section 2](#section_2) during the "check loop" section of the script.
 
 
 ## Concepts
