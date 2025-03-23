@@ -12,6 +12,16 @@ jobs:
     # needs: some_other_job
     runs-on: ubuntu-latest
 
+    # container:
+    #   image: node:18
+      # env:
+      #   NODE_ENV: development
+      # ports:
+      #   - 80
+      # volumes:
+      #   - my_docker_volume:/volume_mount
+      # options: --cpus 1
+
     # each step can import from a pre-existing action on GitHub, or can be a new action from scratch
     # each step builds on the previous one
     # steps run sequentially
@@ -19,7 +29,13 @@ jobs:
     # this is normally always present and ensure your app's repo itself is loaded
     - uses: actions/checkout@v2
 
+    - name: Build icinga2 test environment
+      run: |
+        docker build -t 9xeb/check_elastic_stack/icinga2:test -f docker/icinga2/Dockerfile.test .
 
+    - name: Test icinga2 configurations
+      run:
+        docker run --rm 9xeb/check_elastic_stack/icinga2:test
     # - name: 
     #   uses: actions/setup-java@v1
     #   with:
