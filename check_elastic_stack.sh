@@ -71,6 +71,8 @@ logstash_checks() {
     printf -v check_message "%s\n%s\n" "$check_message" "$logstash_symptom"
 }
 
+
+
 # see https://www.shellscript.sh/examples/getopt/
 PARSED_ARGUMENTS=$(getopt -n check_elastic_stack -o c:h:u:p:t: --long check:,host:,user:,password:,timeout: -- "$@")
 VALID_ARGUMENTS=$?
@@ -204,5 +206,5 @@ done
 # https://assets.nagios.com/downloads/nagioscore/docs/nagioscore/3/en/pluginapi.html
 NAGIOS_CODES=(OK WARNING CRITICAL UNKNOWN)
 service_name=$(echo "$CHECK" | tr '[:lower:]' '[:upper:]')
-printf "%s %s - %s\n" "$service_name" "${NAGIOS_CODES[$nagios_exit_code]}" "$nagios_message"
+printf "%s %s - %s" "$service_name" "${NAGIOS_CODES[$nagios_exit_code]}" "$nagios_message"
 exit "$nagios_exit_code"
