@@ -20,7 +20,7 @@ RUN apt-get update && apt-get -y install apt-transport-https wget && \
 
 # import check_elastic_stack nagios plugin and icinga2 conf
 COPY check_elastic_stack.sh /usr/lib/nagios/plugins/check_elastic_stack
-# COPY check_elastic_stack.conf /etc/icinga2/conf.d/check_elastic_stack.conf
+COPY check_elastic_stack.conf /etc/icinga2/conf.d/check_elastic_stack.conf
 RUN chmod +x /usr/lib/nagios/plugins/check_elastic_stack
 
 CMD ["icinga2", "daemon", "-C"]
