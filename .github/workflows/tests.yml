@@ -1,0 +1,32 @@
+name: check_elastic_stack unit tests
+
+# events that trigger jobs
+on:
+  push:
+    branches: [dev]
+
+# groups a set of actions that will be executed
+# jobs run in parallel by default, unless a job "needs" another job
+jobs:
+  test_icinga2:
+    # needs: some_other_job
+    runs-on: ubuntu-latest
+
+    # each step can import from a pre-existing action on GitHub, or can be a new action from scratch
+    # each step builds on the previous one
+    # steps run sequentially
+    steps:
+    # this is normally always present and ensure your app's repo itself is loaded
+    - uses: actions/checkout@v2
+
+
+    # - name: 
+    #   uses: actions/setup-java@v1
+    #   with:
+    #     java_version: 1.8
+    
+    # - name: Grant execute permissions for gradlew
+    #   run: chmod +x gradlew
+
+    # - name: Build with Gradle
+    #   run: ./gradlew build
