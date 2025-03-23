@@ -1,11 +1,11 @@
 # check_elastic_stack
 
 ## Summary
-- [Plugin Design](#plugin_design)
-- [Elasticsearch Monitoring Concepts](./docs/concepts.md#concepts)
 - [Usage](#usage)
+- [Plugin Design](#nagios_plugin_design)
 - [Examples](#examples)
 - [References](#plugin_design)
+- [(Extra) Elasticsearch Monitoring Concepts](./docs/concepts.md#concepts)
 
 ## Dependencies
 - printf
@@ -13,39 +13,63 @@
 - curl
 - jq
 
-## <a id="plugin_design"></a> Plugin Design
-The script is divided into three major sections, as described below.
-#### Arguments parsing
-User arguments are mapped to named vars to be used later in the script.
-The most important input here is the context (--check), which determines the state of the CHECK and CHECK_PATHS variables, and other optional variables if necessary for that specific context.
-#### Checks loop
-For each path in CHECK_PATHS, cURL is called and its output is passed to a contextual check function according to the value of CHECK.
-Every check function call sets the check_code and check_message variables. As soon as they are returned by the function, two vars called nagios_code and nagios_message are updated following these rules:
-1. if a check_code is higher than the previous one, nagios_code is updated;
-2. check_message is appended in nagios_message in a new line.
-
-The result is that during the "checks loop" a Nagios output is incrementally built. At the end of this loop, you have a coherent nagios_code and nagios_message ready to be printed out.
-#### Nagios output compilation
-nagios_code and nagios_message are formatted and sent to stdout. The scripts exits with Nagios-compatible exit codes:
-- OK
-- WARNING
-- CRITICAL
-- UNKNOWN
-
-Along with some explanations provided by a combination of check messages coming from the various check function calls
-
-### Check Contexts
-Currently there are only three contexts available: elasticsearch, kibana and logstash. However, the script's design is modular enough that it can be easily extended with new contexts. This is done in three steps:
- - define a new check case in section [section 1](#section_1), when parsing arguments, together with the corresponding list of API endpoints to check and other env vars you may require;
- - write a check function that must set the check_code and check_message variables. These variables will be ingested by the main script when building the final Nagios output.
- - call the function defined in section [section 2](#section_2) during the "check loop" section of the script.
-
-
 ## <a id="usage"></a> Usage
-TODO
+```
+Usage: check_elastic_stack [options...]
+  -c, --check <elasticsearch|kibana|logstash>
+  -h, --host <host_or_endpoint>
+  -u, --user <user>
+  -p, --password <password>
+  [-t, --timeout <seconds>]
+  
+Perform healthchecks on elasticsearch, kibana or logstash endpoints.
+```
+
+To validate icinga2 configurations:
+`icinga2 daemon -C`
+
+To list icinga2 objects: `icinga2 object list`
+
+## <a id="nagios_plugin_design"></a> Nagios Plugin Design
+The script is divided into three major sections, as described below.
+### <a id="context_decision"></a> Context decision
+User arguments are mapped to variables to be used later in the script.
+
+These variables determine the *context* for the rest of the script. Incoming arguments such as --check result in the definition of **CHECK** and **CHECK_PATHS** variables. Other optional variables could be defined if the context requires. 
+
+Currently, only three contexts are available: elasticsearch, kibana and logstash. However, adding a new custom context is as easy as adding a new case in the switch.
+
+### Checks loop
+Once the context is established, the checks loop starts. 
+
+For each path in **CHECK_PATHS**, curl is called and its output is passed to a contextual check function according to the value of **CHECK** (which was defined during the [Context decision](#context_decision) phase).
+Every check function call must set the **check_code** and **check_message** variables. As soon as they are returned by the function, two more vars called **nagios_code** and **nagios_message** are updated at each step according to these simple rules:
+1. if the incoming **check_code** is higher than the current one, **nagios_code** is escalated to the new value of **check_code**;
+2. **check_message** is appended in **nagios_message** in a new line.
+
+In other words, what happens here is that during the "checks loop" a Nagios output is incrementally built. At the end of this loop, there will be a coherent **nagios_code** and **nagios_message** ready to be returned.
+### Nagios output compilation
+The third section receives **nagios_code** and **nagios_message**, which are then formatted and sent to stdout. 
+
+The scripts exits with Nagios-compatible exit codes, along with some explanations provided by a combination of all check messages coming from the various check function calls during the "checks loop". As an example, the final output should look something like this:
+```
+CONTEXT_NAME OK - Some justification
+Check function message 1
+Check function message 2
+Check function message 3
+```
+And the exit code will match the output message:
+- 0 - OK
+- 1 - WARNING
+- 2 - CRITICAL
+- 3 - UNKNOWN
+
 
 ## <a id="examples"></a> Examples
-TODO
+
+```
+check_elastic_stack --check elasticsearch --host localhost --user elastic --password changeme --timeout 60
+```
 
 ## <a id="plugin_design"></a> References
 ### Starting example in docker compose (to be adjusted for swarm mode)
