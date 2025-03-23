@@ -34,3 +34,12 @@ Logstash works as a middleware between your unstructured data and Elasticsearch.
 Monitoring Logstash means ensuring the healthcheck API does not report any anomaly in the Pipelines.
 
 See https://www.elastic.co/docs/api/doc/logstash/operation/operation-healthreport for more information
+
+### Icinga2
+Icinga2 is a modular monitoring architecture based on Nagios. Users can define resources such as Hosts, Services and Commands that run periodically and report back for monitoring purposes.
+
+Custom resources are to be appended to the correct file in `/etc/icinga2/conf.d`.
+
+See https://www.howtoforge.com/tutorial/add-a-new-host-and-service-to-be-monitored-by-icinga2/ for a full example.
+
+See https://icinga.com/docs/icinga-2/latest/doc/03-monitoring-basics/ for the full documentation
