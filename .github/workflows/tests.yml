@@ -50,7 +50,7 @@ jobs:
         # limit memory usage of elastic and ensure service is up before performing tests
         options: >-
           -m 1GB
-          --health-cmd 'curl -vk -u elastic:changeme https://localhost:9200/_cluster/health'
+          --health-cmd "curl -vk -u elastic:changeme https://localhost:9200/_cluster/health"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
