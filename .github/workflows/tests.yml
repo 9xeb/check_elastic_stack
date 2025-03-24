@@ -79,12 +79,12 @@ jobs:
     # since we are running the test directly on the runner machine, services are reachable at 127.0.0.1 instead of their container name
     - name: Run OK tests
       env:
-        ELASTIC_HOST: localhost
+        ELASTIC_HOST: elasticsearch
         ELASTIC_PORT: 9200
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: changeme
       run: |
-        until bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"; do sleep 2; done
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"
 
     - name: Run WARNING tests
       run: |
@@ -93,7 +93,7 @@ jobs:
 
     - name: Run CRITICAL tests
       env:
-        ELASTIC_HOST: localhost
+        ELASTIC_HOST: elasticsearch
         ELASTIC_PORT: 9200
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: wrong_password
