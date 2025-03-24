@@ -43,6 +43,9 @@ jobs:
   # The point of this test is to ensure the general workflows are not broken, and not test the correctness of all possible check functions
   test_nagios_plugin:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     container: debian:stable
     services:
       elasticsearch:
