@@ -142,7 +142,7 @@ ENDPOINT=$HOST
 [[ "$ENDPOINT" =~ ^(http|https):\/\/.* ]] || ENDPOINT=$SCHEMA$ENDPOINT
 # Then check if host does not have explicit port and possibly append the default port (depends on check)
 # TODO: this is broken, fix it
-[[ "$ENDPOINT" =~ .*:\d{1,5}$ ]] || ENDPOINT=$ENDPOINT:$PORT
+[[ "$ENDPOINT" =~ .*:[0-9]{1,5}$ ]] || ENDPOINT=$ENDPOINT:$PORT
 
 # echo "Checking $CHECK on endpoint $ENDPOINT with creds $USER:$PASSWORD" 1>&2
 
@@ -158,10 +158,10 @@ nagios_exit_code=0
 # 4. Update the global state of the check
 # The final result is a Nagios compatible response with the highest exit code produced by each check function, and a combination of all explanation messages
 for check_path in $CHECK_PATHS; do
-    # echo "Checking $CHECK on endpoint $ENDPOINT$check_path with creds $USER:$PASSWORD" 1>&2
+    echo "Checking $CHECK on endpoint $ENDPOINT$check_path with creds $USER:$PASSWORD" 1>&2
 
     # 1. Call the API as specified by context
-    curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT""$check_path" 2>&1)
+    curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error -vk -u "$USER":"$PASSWORD" "$ENDPOINT""$check_path" 2>&1)
     curl_exit_code="$?"
 
     # 2. Case statement to look at cURL exit codes
