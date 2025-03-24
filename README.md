@@ -6,6 +6,7 @@
 - [Examples](#examples)
 - [References](#plugin_design)
 - [(Extra) Elasticsearch Monitoring Concepts](./docs/concepts.md#concepts)
+- [(Extra) Test against a real ELK stack](./docs/test_scenarios#test_scenarios)
 
 ## Dependencies
 - printf

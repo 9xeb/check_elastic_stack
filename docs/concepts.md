@@ -1,4 +1,4 @@
-## <a id="plugin_design"></a> Concepts
+## <a id="concepts"></a> Concepts
 ### Elasticsearch
 Elasticsearch is a nosql DB meant to store and index semi-structured data in form of documents. Unlike SQL databases which work in tables, Elasticsearch works more or less with dictionaries, whose keys can change from document to document, hence the term semi-structured. Elasticsearch also features powerful search capabilities, making it useful, for example, for performing CRUD operations on system logs.
 
