@@ -43,7 +43,7 @@ jobs:
   # The point of this test is to ensure the general workflows are not broken, and not test the correctness of all possible check functions
   test_nagios_plugin:
     runs-on: ubuntu-latest
-    # image: debian:stable
+    container: debian:stable
     services:
       elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
@@ -56,18 +56,34 @@ jobs:
           --health-retries 10
         env:
           ELASTIC_PASSWORD: changeme
+          # bootstrap.password: changeme
+          # xpack.security.enabled: 'true'
           # ES_JAVA_OPTS: -Xms1g -Xmx1g"
+        # ports:
+        #   # Opens tcp port 9200 on the host and service container
+        #   # Mismatch exposed port so it works both with public GitHub and local act
+        #   - 9200:9200
+
     steps:
     - uses: actions/checkout@v2
+
+    - name: Install plugin dependencies
+      run: |
+        apt-get update && apt-get -y install jq curl && apt-get clean autoclean
+    
+    # - name: Initialize elasticsearch superuser password
+    #   run: |
+    #     docker run --rm -it --name es01 -m 1GB --health-cmd "curl -vk -u elastic:changeme https://localhost:9200/_cluster/health" --health-interval 10s --health-timeout 5s --health-retries 10 -e ELASTIC_PASSWORD=changeme docker.elastic.co/elasticsearch/elasticsearch:8.17.3
 
     # since we are running the test directly on the runner machine, services are reachable at 127.0.0.1 instead of their container name
     - name: Run OK tests
       env:
-        ELASTIC_HOST: localhost
+        ELASTIC_HOST: elasticsearch
+        ELASTIC_PORT: 9200
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: changeme
       run: |
-        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"
 
     - name: Run WARNING tests
       run: |
@@ -76,19 +92,21 @@ jobs:
 
     - name: Run CRITICAL tests
       env:
-        ELASTIC_HOST: localhost
+        ELASTIC_HOST: elasticsearch
+        ELASTIC_PORT: 9200
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: wrong_password
       run: |
-        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" && exit 1 || [ "$?" == "2" ]
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" && exit 1 || [ "$?" == "2" ]
 
     - name: Run UNKNOWN tests
       env:
         ELASTIC_HOST: unknown_host
+        ELASTIC_PORT: 9200
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: changeme
       run: |
-        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST" --user elastic --password changeme || [ "$?" == "3" ]
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user elastic --password changeme || [ "$?" == "3" ]
 
     
     # - name: Run critical test
