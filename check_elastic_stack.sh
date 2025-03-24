@@ -161,7 +161,7 @@ for check_path in $CHECK_PATHS; do
     echo "Checking $CHECK on endpoint $ENDPOINT$check_path with creds $USER:$PASSWORD" 1>&2
 
     # 1. Call the API as specified by context
-    curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error -vk -u "$USER":"$PASSWORD" "$ENDPOINT""$check_path" 2>&1)
+    curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error -k -u "$USER":"$PASSWORD" "$ENDPOINT""$check_path" 2>&1)
     curl_exit_code="$?"
 
     # 2. Case statement to look at cURL exit codes

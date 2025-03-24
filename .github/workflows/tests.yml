@@ -49,8 +49,8 @@ jobs:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
         # limit memory usage of elastic and ensure service is up before performing tests
         options: >-
-          -m 1GB
-          --health-cmd "curl -vk -u elastic:changeme https://localhost:9200/_cluster/health"
+          -m 2GB
+          --health-cmd "curl --fail -vk -u elastic:changeme https://localhost:9200/_cluster/health"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -71,19 +71,20 @@ jobs:
       run: |
         apt-get update && apt-get -y install jq curl && apt-get clean autoclean
     
-    # - name: Initialize elasticsearch superuser password
+    # - name: Spin up elasticsearch
     #   run: |
-    #     docker run --rm -it --name es01 -m 1GB --health-cmd "curl -vk -u elastic:changeme https://localhost:9200/_cluster/health" --health-interval 10s --health-timeout 5s --health-retries 10 -e ELASTIC_PASSWORD=changeme docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    #     docker run --rm -d --name elasticsearch -p 9200:9200 -m 1GB -e ELASTIC_PASSWORD=changeme docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    #     until curl -u elastic:changeme -vk https://localhost:9200/_cluster/health; do sleep 5; done
 
     # since we are running the test directly on the runner machine, services are reachable at 127.0.0.1 instead of their container name
     - name: Run OK tests
       env:
-        ELASTIC_HOST: elasticsearch
+        ELASTIC_HOST: localhost
         ELASTIC_PORT: 9200
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: changeme
       run: |
-        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"
+        until bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"; do sleep 2; done
 
     - name: Run WARNING tests
       run: |
@@ -92,7 +93,7 @@ jobs:
 
     - name: Run CRITICAL tests
       env:
-        ELASTIC_HOST: elasticsearch
+        ELASTIC_HOST: localhost
         ELASTIC_PORT: 9200
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: wrong_password
@@ -108,7 +109,6 @@ jobs:
       run: |
         bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user elastic --password changeme || [ "$?" == "3" ]
 
-    
-    # - name: Run critical test
-    #   run: |
-    #     bash check_elastic_stack.sh --check elasticsearch --host localhost --user elastic --password changeme || [ "$?" == "2" ]
+    # # - name: Stop elasticsearch
+    # #   run: |
+    # #     docker stop elasticsearch
