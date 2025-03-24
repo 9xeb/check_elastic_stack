@@ -47,7 +47,13 @@ jobs:
     services:
       elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
-        options: -m 1GB
+        # limit memory usage of elastic and ensure service is up before performing tests
+        options: >-
+          -m 1GB
+          --health-cmd 'curl -vk -u elastic:changeme https://localhost:9200/_cluster/health'
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
         env:
           ELASTIC_PASSWORD: changeme
           # ES_JAVA_OPTS: -Xms1g -Xmx1g"
