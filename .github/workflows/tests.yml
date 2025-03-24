@@ -3,7 +3,7 @@ name: check_elastic_stack unit tests
 # events that trigger jobs
 on:
   push:
-    branches: [dev]
+    branches: [dev, main]
 
 # groups a set of actions that will be executed
 # jobs run in parallel by default, unless a job "needs" another job
@@ -36,13 +36,55 @@ jobs:
     - name: Test icinga2 configurations
       run:
         docker run --rm 9xeb/check_elastic_stack/icinga2:test
-    # - name: 
-    #   uses: actions/setup-java@v1
-    #   with:
-    #     java_version: 1.8
-    
-    # - name: Grant execute permissions for gradlew
-    #   run: chmod +x gradlew
 
-    # - name: Build with Gradle
-    #   run: ./gradlew build
+  
+
+  # The idea here is that we must hit at least one of each possible Nagios cases: OK, WARNING, CRITICAL, UNKNOWN
+  # The point of this test is to ensure the general workflows are not broken, and not test the correctness of all possible check functions
+  test_nagios_plugin:
+    runs-on: ubuntu-latest
+    # image: debian:stable
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+        options: -m 1GB
+        env:
+          ELASTIC_PASSWORD: changeme
+          # ES_JAVA_OPTS: -Xms1g -Xmx1g"
+    steps:
+    - uses: actions/checkout@v2
+
+    # since we are running the test directly on the runner machine, services are reachable at 127.0.0.1 instead of their container name
+    - name: Run OK tests
+      env:
+        ELASTIC_HOST: localhost
+        ELASTIC_USER: elastic
+        ELASTIC_PASSWORD: changeme
+      run: |
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"
+
+    - name: Run WARNING tests
+      run: |
+        echo "WARNING tests to be implemented!"
+        exit 0
+
+    - name: Run CRITICAL tests
+      env:
+        ELASTIC_HOST: localhost
+        ELASTIC_USER: elastic
+        ELASTIC_PASSWORD: wrong_password
+      run: |
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" && exit 1 || [ "$?" == "2" ]
+
+    - name: Run UNKNOWN tests
+      env:
+        ELASTIC_HOST: unknown_host
+        ELASTIC_USER: elastic
+        ELASTIC_PASSWORD: changeme
+      run: |
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST" --user elastic --password changeme || [ "$?" == "3" ]
+
+    
+    # - name: Run critical test
+    #   run: |
+    #     bash check_elastic_stack.sh --check elasticsearch --host localhost --user elastic --password changeme || [ "$?" == "2" ]
