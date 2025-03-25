@@ -46,11 +46,11 @@ Once the context is established, the checks loop starts.
 For each path in **CHECK_PATHS**, curl is called and its output is passed to a contextual check function according to the value of **CHECK** (which was defined during the [Context decision](#context_decision) phase).
 Every check function call must set the **check_code** and **check_message** variables. As soon as they are returned by the function, two more vars called **nagios_code** and **nagios_message** are updated at each step according to these simple rules:
 1. if the incoming **check_code** is higher than the current one, **nagios_code** is escalated to the new value of **check_code**;
-2. **check_message** is appended in **nagios_message** in a new line.
+2. **check_message** is appended to **nagios_message** in a new line.
 
-In other words, what happens here is that during the "checks loop" a Nagios output is incrementally built. At the end of this loop, there will be a coherent **nagios_code** and **nagios_message** ready to be returned.
+In other words, what happens is that during the "checks loop" a Nagios output is incrementally built. At the end of this loop, there will be a coherent **nagios_code** and **nagios_message** ready to be returned.
 ### Nagios output compilation
-The third section receives **nagios_code** and **nagios_message**, which are then formatted and sent to stdout. 
+The third section receives **nagios_code** and **nagios_message**, which are then respectively returned as exit code and sent to stdout. 
 
 The scripts exits with Nagios-compatible exit codes, along with some explanations provided by a combination of all check messages coming from the various check function calls during the "checks loop". As an example, the final output should look something like this:
 ```
