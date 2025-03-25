@@ -87,7 +87,7 @@ jobs:
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: changeme
       run: |
-        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD"
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" --skip-tls
 
     - name: Run WARNING tests
       run: |
@@ -101,7 +101,7 @@ jobs:
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: wrong_password
       run: |
-        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" && exit 1 || [ "$?" == "2" ]
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" --skip-tls && exit 1 || [ "$?" == "2" ]
 
     - name: Run UNKNOWN tests
       env:
@@ -110,7 +110,7 @@ jobs:
         ELASTIC_USER: elastic
         ELASTIC_PASSWORD: changeme
       run: |
-        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user elastic --password changeme || [ "$?" == "3" ]
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user elastic --password changeme --skip-tls || [ "$?" == "3" ]
 
     # # - name: Stop elasticsearch
     # #   run: |
