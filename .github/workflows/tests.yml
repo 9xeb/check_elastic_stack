@@ -1,0 +1,117 @@
+name: check_elastic_stack unit tests
+
+# events that trigger jobs
+on:
+  push:
+    branches: [dev, main]
+
+# groups a set of actions that will be executed
+# jobs run in parallel by default, unless a job "needs" another job
+jobs:
+  test_icinga2:
+    # needs: some_other_job
+    runs-on: ubuntu-latest
+
+    # container:
+    #   image: node:18
+      # env:
+      #   NODE_ENV: development
+      # ports:
+      #   - 80
+      # volumes:
+      #   - my_docker_volume:/volume_mount
+      # options: --cpus 1
+
+    # each step can import from a pre-existing action on GitHub, or can be a new action from scratch
+    # each step builds on the previous one
+    # steps run sequentially
+    steps:
+    # this is normally always present and ensure your app's repo itself is loaded
+    - uses: actions/checkout@v2
+
+    - name: Build icinga2 test environment
+      run: |
+        docker build -t 9xeb/check_elastic_stack/icinga2:test -f docker/icinga2/Dockerfile.test .
+
+    - name: Test icinga2 configurations
+      run:
+        docker run --rm 9xeb/check_elastic_stack/icinga2:test
+
+  
+
+  # The idea here is that we must hit at least one of each possible Nagios cases: OK, WARNING, CRITICAL, UNKNOWN
+  # The point of this test is to ensure the general workflows are not broken, and not test the correctness of all possible check functions
+  test_nagios_plugin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    container: debian:stable
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+        # limit memory usage of elastic and ensure service is up before performing tests
+        options: >-
+          -m 2GB
+          --health-cmd "curl --fail -vk -u elastic:changeme https://localhost:9200/_cluster/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        env:
+          ELASTIC_PASSWORD: changeme
+          # bootstrap.password: changeme
+          # xpack.security.enabled: 'true'
+          # ES_JAVA_OPTS: -Xms1g -Xmx1g"
+        # ports:
+        #   # Opens tcp port 9200 on the host and service container
+        #   # Mismatch exposed port so it works both with public GitHub and local act
+        #   - 9200:9200
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install plugin dependencies
+      run: |
+        apt-get update && apt-get -y install jq curl && apt-get clean autoclean
+    
+    # - name: Spin up elasticsearch
+    #   run: |
+    #     docker run --rm -d --name elasticsearch -p 9200:9200 -m 1GB -e ELASTIC_PASSWORD=changeme docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    #     until curl -u elastic:changeme -vk https://localhost:9200/_cluster/health; do sleep 5; done
+
+    # since we are running the test directly on the runner machine, services are reachable at 127.0.0.1 instead of their container name
+    - name: Run OK tests
+      env:
+        ELASTIC_HOST: elasticsearch
+        ELASTIC_PORT: 9200
+        ELASTIC_USER: elastic
+        ELASTIC_PASSWORD: changeme
+      run: |
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" --skip-tls
+
+    - name: Run WARNING tests
+      run: |
+        echo "WARNING tests to be implemented!"
+        exit 0
+
+    - name: Run CRITICAL tests
+      env:
+        ELASTIC_HOST: elasticsearch
+        ELASTIC_PORT: 9200
+        ELASTIC_USER: elastic
+        ELASTIC_PASSWORD: wrong_password
+      run: |
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user "$ELASTIC_USER" --password "$ELASTIC_PASSWORD" --skip-tls && exit 1 || [ "$?" == "2" ]
+
+    - name: Run UNKNOWN tests
+      env:
+        ELASTIC_HOST: unknown_host
+        ELASTIC_PORT: 9200
+        ELASTIC_USER: elastic
+        ELASTIC_PASSWORD: changeme
+      run: |
+        bash check_elastic_stack.sh --check elasticsearch --host "$ELASTIC_HOST:$ELASTIC_PORT" --user elastic --password changeme --skip-tls || [ "$?" == "3" ]
+
+    # # - name: Stop elasticsearch
+    # #   run: |
+    # #     docker stop elasticsearch

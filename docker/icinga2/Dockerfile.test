@@ -1,0 +1,26 @@
+# https://icinga.com/docs/icinga-2/latest/doc/02-installation/01-Debian/
+FROM debian:stable
+
+# configure icinga2 apt repo and install check_elastic_stack dependencies
+RUN apt-get update && apt-get -y install apt-transport-https wget && \
+    wget -O icinga-archive-keyring.deb "https://packages.icinga.com/icinga-archive-keyring_latest+debian$(. /etc/os-release; echo "$VERSION_ID").deb" && \
+    apt-get -y install ./icinga-archive-keyring.deb; \
+    DIST=$(awk -F"[)(]+" '/VERSION=/ {print $2}' /etc/os-release); \
+    echo "deb [signed-by=/usr/share/keyrings/icinga-archive-keyring.gpg] https://packages.icinga.com/debian icinga-${DIST} main" > \
+    /etc/apt/sources.list.d/${DIST}-icinga.list; \
+    echo "deb-src [signed-by=/usr/share/keyrings/icinga-archive-keyring.gpg] https://packages.icinga.com/debian icinga-${DIST} main" >> \
+    /etc/apt/sources.list.d/${DIST}-icinga.list; \
+    apt-get update && apt-get -y install curl icinga2 icingadb-redis jq sudo && apt-get clean autoclean
+
+# initialize icinga2 test environment
+# RUN /usr/lib/icinga2/prepare-dirs /etc/default/icinga2 && \
+#     icinga2 daemon -C --dump-objects && \
+#     icinga2 api setup && \
+#     icinga2 feature enable icingadb
+
+# import check_elastic_stack nagios plugin and icinga2 conf
+COPY check_elastic_stack.sh /usr/lib/nagios/plugins/check_elastic_stack
+COPY check_elastic_stack.conf /etc/icinga2/conf.d/check_elastic_stack.conf
+RUN chmod +x /usr/lib/nagios/plugins/check_elastic_stack
+
+CMD ["icinga2", "daemon", "-C"]

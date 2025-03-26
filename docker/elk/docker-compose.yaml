@@ -1,0 +1,177 @@
+version: '3.9'
+
+services:
+  # healthcheck:
+  #   # run healthcheck script periodically as healthcheck for testing
+  # #   command: sleep inf
+  #     healthcheck:
+  #     test: ["CMD-SHELL", "./check_elastic_stack"]
+  #     interval: 1s
+  #     timeout: 5s
+  #     retries: 120
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    # <<: *elasticsearch-common
+    hostname: es{{.Task.Slot}}
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata:/usr/share/elasticsearch/data
+    environment:
+      - node.name=es{{.Task.Slot}}
+      # explicit host publishing must be done to ensure elasticsearch does not advertise its 'ingress' NIC when using swarm's default loadbalancer
+      - network.publish_host=es{{.Task.Slot}}
+      - cluster.name=docker-cluster
+      - cluster.initial_master_nodes=es1,es2,es3
+      - discovery.seed_hosts=es1,es2
+      - ELASTIC_PASSWORD=changeme
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.key
+      - xpack.security.http.ssl.certificate=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.key
+      - xpack.security.transport.ssl.certificate=certs/es{{.Task.Slot}}/es{{.Task.Slot}}.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=basic
+      - xpack.ml.use_auto_machine_memory_percent=true
+    # mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+      replicas: 5
+    # binding to port spawn a new virtual NIC in the container
+    ports:
+      - 9200:9200
+    networks:
+      - elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.17.3
+    hostname: kibana{{.Task.Slot}}
+    volumes:
+      - certs:/usr/share/kibana/config/certs
+      - kibanadata:/usr/share/kibana/data
+    ports:
+      - 5601:5601
+    networks:
+      - elasticsearch
+    # see https://www.elastic.co/guide/en/kibana/current/docker.html#configuring-kibana-docker for kibana env vars format (different from elasticsearch!)
+    # looks like kibana is just a frontend of elasticsearch
+    # data consistency is guaranteed by elasticsearch cluster
+    # the only thing to keep in mind with multi-node kibana is to preserve user session if a replica crashes. 
+    # User session is preserved across replicas if they all share:
+    # - 'xpack.security.cookieName' so a different replica can pick up the same cookie;
+    # - 'xpack.security_encryptionkey' to encrypt cookie with the same key;
+    # - 'xpack.reporting.encryptionkey'
+    # - 'xpack.encryptedsavedobjects.encryptionkey'
+    environment:
+      SERVER_NAME: kibana{{.Task.Slot}}
+      ELASTICSEARCH_HOSTS: '["https://es1:9200","https://es2:9200","https://es3:9200","https://es4:9200","https://es5:9200"]'
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: changeme
+      ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES: config/certs/ca/ca.crt
+      XPACK_SECURITY_COOKIENAME: docker-cluster
+      XPACK_SECURITY_ENCRYPTIONKEY: c6i544R629Ekw4yosku2WMXdLD2qU9PT
+      XPACK_REPORTING_ENCRYPTIONKEY: FacVbhg6SH7xFvxfMtYS6gr64GGDT65f
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: rBvX52KYB24o8oM6xXyVnwTb4pGCXNie
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+      replicas: 2
+      # replicas: 3
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.17.3
+    hostname: logstash{{.Task.Slot}}
+    # labels:
+    #   co.elastic.logs/module: logstash
+    user: root
+    volumes:
+      - certs:/usr/share/logstash/certs
+      - logstashdata:/usr/share/logstash/data
+      # - "./logstash_ingest_data/:/usr/share/logstash/ingest_data/"
+      # - "./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro"
+    environment:
+      node.name: logstash{{.Task.Slot}}
+      xpack.monitoring.enabled: 'false'
+      xpack.monitoring.elasticsearch.hosts: '["https://es1:9200","https://es2:9200","https://es3:9200","https://es4:9200","https://es5:9200"]'
+      ELASTIC_USER: elastic
+      ELASTIC_PASSWORD: changeme
+      # ELASTIC_HOSTS: '["https://es1:9200","https://es2:9200","https://es3:9200","https://es4:9200","https://es5:9200"]'
+      # ELASTIC_HOSTS: https://es1:9200
+    ports:
+      - 9600:9600
+    networks:
+      - elasticsearch
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:9600 | grep -q 'HTTP/1.1 200 OK'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+    deploy:
+      replicas: 2
+
+  setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    user: "0"
+    command: bash /setup.sh
+    environment:
+      - ELASTIC_PASSWORD=changeme
+      - KIBANA_PASSWORD=changeme
+    configs:
+      - source: setup-script
+        target: /setup.sh
+      - source: es-instances
+        target: /instances.yml
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+    networks:
+      - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f config/done ]"]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+    deploy:
+      replicas: 1
+
+configs:
+  setup-script:
+    file: ./setup.sh
+  es-instances:
+    file: ./instances.yml
+
+volumes:
+  certs:
+  esdata:
+    name: 'elk_esdata{{.Task.Slot}}'
+  kibanadata:
+    name: 'elk_kibanadata{{.Task.Slot}}'
+  logstashdata:
+    name: 'elk_logstashdata{{.Task.Slot}}'
+
+networks:
+  elasticsearch:
