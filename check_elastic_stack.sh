@@ -16,6 +16,7 @@ Perform healthchecks on elasticsearch, kibana or logstash endpoints."
 
 elasticsearch_checks() {
     # https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-health.html
+    # Parse JSON response with jq and get the status color
     elasticsearch_status=$(echo "$curl_output" | jq -e '.status' | xargs)
     case $elasticsearch_status in
         green)  check_code=0; check_message="All shards are active!"    ;;
@@ -23,13 +24,12 @@ elasticsearch_checks() {
         red)    check_code=2; check_message="Some shards are absent!"   ;;
         *)      check_code=3; check_message="Unknown shards status!"    ;;
     esac
-    # printf -v check_message "%s\n%s" "$check_message" "$curl_output"
 }
 
 basic_kibana_checks() {
     # https://www.elastic.co/blog/troubleshooting-kibana-health
 
-    # Kibana checks support multiple API endpoints
+    # This Kibana check function supports multiple API endpoints
     if [[ "$check_path" == "/api/status" ]]; then
         kibana_overall=$(echo "$curl_output" | jq -rc '.status.overall.level' | xargs)
         case $kibana_overall in
@@ -59,6 +59,8 @@ basic_kibana_checks() {
 logstash_checks() {
     # https://www.elastic.co/docs/api/doc/logstash/operation/operation-healthreport
     # https://discuss.elastic.co/t/logstash-healthcheck/271088/2
+
+    # This check function is very similar to the one for Elasticsearch
     logstash_status=$(echo "$curl_output" | jq -rc '.status' | xargs)
     case $logstash_status in
         green)  check_code=0; check_message="$check_path is green!"   ;;
@@ -73,33 +75,18 @@ logstash_checks() {
 }
 
 
-
-# see https://www.shellscript.sh/examples/getopt/
+# FIRST SECTION: parse user arguments
 PARSED_ARGUMENTS=$(getopt -n check_elastic_stack -o c:h:u:p:t: --long check:,host:,user:,password:,timeout:,skip-tls -- "$@")
 VALID_ARGUMENTS=$?
 if [ "$VALID_ARGUMENTS" != "0" ]; then
     usage
 fi
-# echo "PARSED_ARGUMENTS is $PARSED_ARGUMENTS" 1>&2
 eval set -- "$PARSED_ARGUMENTS"
-
-
-# TODO: maybe simpler without getopt
-# while [ $# -gt 0 ]; do
-#     case $1 in
-#         -s|--service) SERVICE_NAME="$2" ; shift;;
-#         -r|--registry) REGISTRY="$2" ; shift;;
-#         -h|--help) HELP=true ;;
-#         *) echo "help" && exit 1;;
-#     esac
-#     shift
-# done
 
 # Default value for timeout seconds
 TIMEOUT_SECONDS=5
 
 
-# FIRST SECTION: parse user arguments
 # Translate 'getopt'-ed arguments into env vars to be used during actual check operations
 # Care is taken here to ensure sane defaults to fall back to are set for values like PORTs and URLs
 while :
@@ -143,10 +130,10 @@ ENDPOINT=$HOST
 # First check if host does not have URL scheme and possibly prepend the default (https)
 [[ "$ENDPOINT" =~ ^(http|https):\/\/.* ]] || ENDPOINT=$SCHEMA$ENDPOINT
 # Then check if host does not have explicit port and possibly append the default port (depends on check)
-# TODO: this is broken, fix it
 [[ "$ENDPOINT" =~ .*:[0-9]{1,5}$ ]] || ENDPOINT=$ENDPOINT:$PORT
 
 # SECOND SECTION: perform context-based checks
+# Starting condition is exit code 0 and no message
 nagios_message=""
 nagios_exit_code=0
 
@@ -163,7 +150,6 @@ for check_path in $CHECK_PATHS; do
     curl_output=$(curl --max-time "$TIMEOUT_SECONDS" --silent --fail --show-error $EXTRA_CURL_PARAMS -u "$USER":"$PASSWORD" "$ENDPOINT""$check_path" 2>&1)
     curl_exit_code="$?"
 
-    # echo "OUTPUT: $curl_output"
     # 2. Case statement to look at cURL exit codes
     case "$curl_exit_code" in
         0) 
@@ -171,7 +157,7 @@ for check_path in $CHECK_PATHS; do
             case $CHECK in
                 # This second section is available for defining new contexts too.
                 # Ensure you refer to the value of CHECK you defined in the first section for your context
-                # You can call your own check function, which has access to all the variables you defined in the first section
+                # You can call your own check function if you define one above, which has access to all the variables you defined in the first section
                 # Make sure your function sets the check_code and check_message variables according to Nagios output specs!
                 elasticsearch)  elasticsearch_checks ;;
                 kibana)         basic_kibana_checks  ;;
@@ -186,7 +172,6 @@ for check_path in $CHECK_PATHS; do
             check_code=2
             ;;
         *) 
-            # printf "%s UNKNOWN - (%s) %s" "$CHECK" "$ENDPOINT"/"$check_path" "$curl_output";
             check_message=$(printf "%s %s" "$check_path" "$curl_output";)
             check_code=3
             ;;
@@ -197,7 +182,6 @@ for check_path in $CHECK_PATHS; do
     if (( check_code >= nagios_exit_code )); then
         # Get here if a check escalated to a higher nagios exit code
         nagios_exit_code=$check_code
-        # printf -v nagios_message "%s%s\n" "$nagios_message" "$check_message"
     fi
 done
 
