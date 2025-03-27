@@ -15,7 +15,7 @@ docker stack ps elk
 
 Once the ELK cluster is up, you can test the check script under normal (green) conditions:
 ```
-check_elastic_stack.sh --check elasticsearch --host localhost --user elastic --password changeme
+check_elastic_stack.sh --check elasticsearch --host localhost --user elastic --password changeme --skip-tls
 ```
 
 Next, try to scale down elasticsearch to three replicas
@@ -31,7 +31,7 @@ You should see elasticsearch turning yellow, and the check script returning the 
 Elasticsearch is yellow because some shards replicas have been lost. At this point it begins re-replicating the underreplicated shards.
 After a few minutes, Elasticsearch will turn back green and you can check that again with:
 ```
-check_elastic_stack.sh --check elasticsearch --host localhost --user elastic --password changeme
+check_elastic_stack.sh --check elasticsearch --host localhost --user elastic --password changeme --skip-tls
 ```
 
 Feel free to play with scaling down/up ELK components in the test environment, and see how the check script reacts to ELK failures!
